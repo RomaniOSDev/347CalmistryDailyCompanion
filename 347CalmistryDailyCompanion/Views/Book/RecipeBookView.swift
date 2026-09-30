@@ -13,6 +13,7 @@ struct RecipeBookView: View {
     @State private var ratingFilter: RatingFilter = .all
     @State private var servingFactor: Double = 1
     @State private var shopNotice: String?
+    @State private var showTools = false
 
     private var filteredRecipes: [Recipe] {
         let query = ingredientQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -37,28 +38,27 @@ struct RecipeBookView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    TasteBanner(assetName: "BannerJournal")
-                        .clipShape(TornPaperShape())
-                        .shadow(color: Palette.background.opacity(0.32), radius: 8, x: 0, y: 4)
-
-                    header
+                VStack(alignment: .leading, spacing: 16) {
+                    FeatureHero(
+                        title: "My Kitchen",
+                        subtitle: "Saved shelf dishes, imports, and recipes you wrote yourself.",
+                        symbol: "fork.knife"
+                    )
 
                     ratingChips
-
                     searchField
 
                     if store.recipes.isEmpty {
                         EmptyGarden(
-                            title: "No Recipes Yet",
-                            systemImage: "book",
-                            message: "Start a page for a dish you love. Add a title, at least one ingredient, and one step."
+                            title: "Kitchen is waiting",
+                            systemImage: "fork.knife",
+                            message: "Save a dish from the Shelf, import one, or tap + to write your own. Everything stays on this device."
                         )
                     } else if filteredRecipes.isEmpty {
                         EmptyGarden(
-                            title: "Nothing Matches",
-                            systemImage: "leaf.circle",
-                            message: "No dish title, cuisine, or ingredient matches that search."
+                            title: "No matches",
+                            systemImage: "line.3.horizontal.decrease.circle",
+                            message: "Nothing in your kitchen matches that filter or search."
                         )
                     } else {
                         ForEach(filteredRecipes) { recipe in
@@ -66,31 +66,43 @@ struct RecipeBookView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .tabRootPadding()
             }
             .scrollDismissesKeyboard(.immediately)
             .dismissKeyboardOnTap()
             .keyboardDoneButton()
             .gardenPage()
-            .navigationTitle("Book")
+            .navigationTitle("Kitchen")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        showTools = true
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         editorRecipe = nil
                         showEditor = true
                     } label: {
                         Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundColor(Palette.primary)
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundColor(Palette.onPrimary)
+                            .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
                     }
                     .accessibilityLabel("Add recipe")
                 }
             }
             .sheet(isPresented: $showEditor) {
                 RecipeEditorSheet(recipe: editorRecipe)
+                    .environmentObject(store)
+            }
+            .sheet(isPresented: $showTools) {
+                ToolsHubView()
                     .environmentObject(store)
             }
             .fullScreenCover(item: $cookRecipe) { recipe in
@@ -109,19 +121,8 @@ struct RecipeBookView: View {
                     pendingDelete = nil
                 }
             } message: { recipe in
-                Text("“\(recipe.title)” will be removed from your book.")
+                Text("“\(recipe.title)” will leave your kitchen.")
             }
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Recipe Book")
-                .font(.system(.title2, design: .rounded).weight(.bold))
-                .foregroundColor(Palette.primary)
-            Text("Tap a card to unfold ingredients and steps.")
-                .font(.system(.subheadline, design: .rounded))
-                .foregroundColor(Palette.accent)
         }
     }
 
@@ -129,37 +130,23 @@ struct RecipeBookView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(RatingFilter.allCases) { filter in
-                    Button {
+                    SoftChip(title: filter.title, selected: ratingFilter == filter) {
                         ratingFilter = filter
-                    } label: {
-                        Text(filter.title)
-                            .font(.system(.caption, design: .rounded).weight(.bold))
-                            .foregroundColor(ratingFilter == filter ? Palette.surface : Palette.primary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(ratingFilter == filter ? Palette.primary : Palette.surface)
-                            .clipShape(Capsule())
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
     }
 
     private var searchField: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "leaf")
-                .foregroundColor(Palette.primary)
-            TextField("Search title, cuisine, ingredient", text: $ingredientQuery)
-                .font(.system(.body, design: .rounded))
-                .foregroundColor(Palette.primary)
-        }
-        .padding(11)
-        .background(Palette.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Palette.primary.opacity(0.22), lineWidth: 1)
+        FieldShell {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(Palette.primary)
+                TextField("Search your kitchen", text: $ingredientQuery)
+                    .font(.system(.body, design: .rounded).weight(.medium))
+                    .foregroundColor(Palette.ink)
+            }
         }
     }
 
@@ -173,21 +160,17 @@ struct RecipeBookView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(recipe.title)
                             .font(.system(.headline, design: .rounded).weight(.bold))
-                            .foregroundColor(Palette.primary)
+                            .foregroundColor(Palette.ink)
                         HStack(spacing: 6) {
                             if !recipe.cuisine.isEmpty {
                                 Text(recipe.cuisine)
                                     .font(.system(.caption, design: .rounded))
-                                    .foregroundColor(Palette.accent)
+                                    .foregroundColor(Palette.muted)
                             }
-                            if store.rating(for: recipe.id) > 0 {
-                                HStack(spacing: 2) {
-                                    ForEach(0..<store.rating(for: recipe.id), id: \.self) { _ in
-                                        Image(systemName: "leaf.fill")
-                                            .font(.system(size: 9))
-                                            .foregroundColor(Palette.primary)
-                                    }
-                                }
+                            if let source = recipe.sourceTag, !source.isEmpty {
+                                Text(source.hasPrefix("shelf:") ? "From Shelf" : source)
+                                    .font(.system(.caption2, design: .rounded).weight(.bold))
+                                    .foregroundColor(Palette.primary.opacity(0.8))
                             }
                         }
                     }
@@ -203,6 +186,7 @@ struct RecipeBookView: View {
                     } else {
                         expandedID = recipe.id
                         servingFactor = 1
+                        shopNotice = nil
                         store.markActivity(viewedRecipeID: recipe.id)
                     }
                 }
@@ -217,7 +201,7 @@ struct RecipeBookView: View {
                     } label: {
                         HStack {
                             Image(systemName: "fork.knife.circle.fill")
-                            Text(cooked == 0 ? "I cooked this" : "Cooked \(cooked)× · again")
+                            Text(cooked == 0 ? "Mark as cooked" : "Cooked \(cooked)× · again")
                                 .font(.system(.subheadline, design: .rounded).weight(.bold))
                             Spacer()
                         }
@@ -230,7 +214,7 @@ struct RecipeBookView: View {
                     } label: {
                         HStack {
                             Image(systemName: "text.book.closed.fill")
-                            Text("Cook Mode")
+                            Text("Open cook mode")
                                 .font(.system(.subheadline, design: .rounded).weight(.bold))
                             Spacer()
                         }
@@ -238,9 +222,9 @@ struct RecipeBookView: View {
                     }
                     .buttonStyle(.plain)
 
-                    Text("Taste")
+                    Text("Rating")
                         .font(.system(.subheadline, design: .rounded).weight(.bold))
-                        .foregroundColor(Palette.primary)
+                        .foregroundColor(Palette.ink)
                     LeafRatingRow(value: store.rating(for: recipe.id)) { value in
                         store.setRating(value, for: recipe.id)
                     }
@@ -250,7 +234,7 @@ struct RecipeBookView: View {
                     HStack {
                         Text("Ingredients")
                             .font(.system(.subheadline, design: .rounded).weight(.bold))
-                            .foregroundColor(Palette.primary)
+                            .foregroundColor(Palette.ink)
                         Spacer()
                         Button {
                             store.addIngredientsToShopping(
@@ -269,7 +253,7 @@ struct RecipeBookView: View {
                     ForEach(Array(recipe.ingredients.enumerated()), id: \.offset) { _, item in
                         Text("• \(ServingScale.apply(item, factor: servingFactor))")
                             .font(.system(.body, design: .rounded))
-                            .foregroundColor(Palette.accent)
+                            .foregroundColor(Palette.muted)
                     }
                     if let shopNotice {
                         Text(shopNotice)
@@ -280,14 +264,14 @@ struct RecipeBookView: View {
                     HStack {
                         Text("Steps")
                             .font(.system(.subheadline, design: .rounded).weight(.bold))
-                            .foregroundColor(Palette.primary)
+                            .foregroundColor(Palette.ink)
                         Spacer()
                         if !(store.checkedSteps[recipe.id.uuidString] ?? []).isEmpty {
                             Button("Reset checks") {
                                 store.resetSteps(recipeID: recipe.id)
                             }
                             .font(.system(.caption, design: .rounded).weight(.bold))
-                            .foregroundColor(Palette.accent)
+                            .foregroundColor(Palette.muted)
                             .buttonStyle(.plain)
                         }
                     }
@@ -303,6 +287,7 @@ struct RecipeBookView: View {
                     }
                 }
             }
+            .padding(.top, 6)
         }
         .contextMenu {
             Button {

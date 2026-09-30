@@ -4,62 +4,57 @@ import Foundation
 @MainActor
 final class CookbookStore: ObservableObject {
     @Published var recipes: [Recipe] = []
-    @Published var captions: [CaptionEntry] = []
-    @Published var favouriteSampleIDs: [String] = []
+    @Published var fridgeItems: [FridgeItem] = []
+    @Published var savedCatalogIDs: [String] = []
     @Published var themeLabels: [String] = []
-    @Published var lastEditedCaptionDate: Date?
     @Published var lastVisitedCategory: String = ""
     @Published var lastViewedRecipeID: String?
     @Published var cookSessions: [CookSession] = []
     @Published var ratings: [String: Int] = [:]
     @Published var checkedSteps: [String: [Int]] = [:]
     @Published var shoppingItems: [ShoppingItem] = []
-    @Published var leftovers: [LeftoverNote] = []
-    @Published var mealPlan: [MealPlanEntry] = WeekPlan.mondayFirst.map { MealPlanEntry(weekday: $0.weekday, recipeID: nil) }
+    @Published var mealPlan: [MealPlanEntry] = WeekPlan.mondayFirst.map {
+        MealPlanEntry(weekday: $0.weekday)
+    }
     @Published var timers: [KitchenTimerSlot] = KitchenTimerSlot.defaults
+    @Published var hasCompletedOnboarding: Bool
 
     private let defaults = UserDefaults.standard
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
     private enum Key {
-        static let recipes = "cookbook.recipes"
-        static let captions = "cookbook.captions"
-        static let favourites = "cookbook.favouriteSampleIDs"
-        static let themeLabels = "cookbook.themeLabels"
-        static let lastEditedCaptionDate = "cookbook.lastEditedCaptionDate"
-        static let lastVisitedCategory = "cookbook.lastVisitedCategory"
-        static let lastViewedRecipeID = "cookbook.lastViewedRecipeID"
-        static let cookSessions = "cookbook.cookSessions"
-        static let ratings = "cookbook.ratings"
-        static let checkedSteps = "cookbook.checkedSteps"
-        static let shoppingItems = "cookbook.shoppingItems"
-        static let leftovers = "cookbook.leftovers"
-        static let mealPlan = "cookbook.mealPlan"
-        static let timers = "cookbook.timers"
+        static let recipes = "pantry.recipes"
+        static let fridge = "pantry.fridgeItems"
+        static let savedCatalog = "pantry.savedCatalogIDs"
+        static let themeLabels = "pantry.themeLabels"
+        static let lastVisitedCategory = "pantry.lastVisitedCategory"
+        static let lastViewedRecipeID = "pantry.lastViewedRecipeID"
+        static let cookSessions = "pantry.cookSessions"
+        static let ratings = "pantry.ratings"
+        static let checkedSteps = "pantry.checkedSteps"
+        static let shoppingItems = "pantry.shoppingItems"
+        static let mealPlan = "pantry.mealPlan"
+        static let timers = "pantry.timers"
+        static let onboarding = "pantry.hasCompletedOnboarding"
 
         static var all: [String] {
             [
-                recipes,
-                captions,
-                favourites,
-                themeLabels,
-                lastEditedCaptionDate,
-                lastVisitedCategory,
-                lastViewedRecipeID,
-                cookSessions,
-                ratings,
-                checkedSteps,
-                shoppingItems,
-                leftovers,
-                mealPlan,
-                timers
+                recipes, fridge, savedCatalog, themeLabels, lastVisitedCategory,
+                lastViewedRecipeID, cookSessions, ratings, checkedSteps,
+                shoppingItems, mealPlan, timers
             ]
         }
     }
 
     init() {
+        hasCompletedOnboarding = defaults.bool(forKey: Key.onboarding)
         loadAll()
+    }
+
+    func completeOnboarding() {
+        hasCompletedOnboarding = true
+        defaults.set(true, forKey: Key.onboarding)
     }
 
     func addRecipe(_ recipe: Recipe) {
@@ -86,12 +81,7 @@ final class CookbookStore: ObservableObject {
     func deleteRecipe(id: UUID) {
         guard let recipe = recipes.first(where: { $0.id == id }) else { return }
         recipes.removeAll { $0.id == id }
-        let orphaned = captions.filter { $0.recipeID == id }
-        captions.removeAll { $0.recipeID == id }
         releasePhotoIfUnused(recipe.photoFileName, keeping: nil)
-        for caption in orphaned {
-            releasePhotoIfUnused(caption.photoFileName, keeping: nil)
-        }
         if lastViewedRecipeID == id.uuidString {
             lastViewedRecipeID = nil
         }
@@ -101,19 +91,99 @@ final class CookbookStore: ObservableObject {
         for index in mealPlan.indices where mealPlan[index].recipeID == id {
             mealPlan[index].recipeID = nil
         }
-        for index in leftovers.indices where leftovers[index].recipeID == id {
-            leftovers[index].recipeID = nil
-        }
         refreshThemeLabels()
         persistAll()
     }
 
+    func addFridgeItem(name: String, amountNote: String = "") {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        fridgeItems.insert(
+            FridgeItem(name: trimmed, amountNote: amountNote.trimmingCharacters(in: .whitespacesAndNewlines)),
+            at: 0
+        )
+        persistFridge()
+    }
+
+    func removeFridgeItem(id: UUID) {
+        fridgeItems.removeAll { $0.id == id }
+        persistFridge()
+    }
+
+    func clearFridge() {
+        fridgeItems = []
+        persistFridge()
+    }
+
+    func generateWeekFromFridge() -> [RecipeMatch] {
+        let matches = FridgePlanner.rankedMatches(fridgeItems: fridgeItems)
+        mealPlan = FridgePlanner.buildWeekPlan(from: matches)
+        persistMealPlan()
+        return matches
+    }
+
+    func setMealDay(weekday: Int, match: RecipeMatch?) {
+        guard let index = mealPlan.firstIndex(where: { $0.weekday == weekday }) else { return }
+        if let match {
+            mealPlan[index].catalogDishID = match.dish.id
+            mealPlan[index].titleSnapshot = match.dish.title
+            mealPlan[index].emojiSnapshot = match.dish.emoji
+            mealPlan[index].recipeID = nil
+        } else {
+            mealPlan[index] = MealPlanEntry(weekday: weekday)
+        }
+        persistMealPlan()
+    }
+
+    func saveCatalogDish(_ dish: CatalogDish) -> Recipe {
+        let recipe = Recipe(
+            title: dish.title,
+            emoji: dish.emoji,
+            cuisine: dish.cuisine,
+            ingredients: dish.ingredients,
+            instructions: dish.instructions,
+            sourceTag: "shelf:\(dish.id)"
+        )
+        addRecipe(recipe)
+        if !savedCatalogIDs.contains(dish.id) {
+            savedCatalogIDs.append(dish.id)
+            persistCatalog()
+        }
+        markActivity(viewedRecipeID: recipe.id, category: AuthorCatalog.section(for: dish.id))
+        return recipe
+    }
+
+    func toggleSavedCatalog(id: String) {
+        if let index = savedCatalogIDs.firstIndex(of: id) {
+            savedCatalogIDs.remove(at: index)
+        } else {
+            savedCatalogIDs.append(id)
+        }
+        persistCatalog()
+    }
+
+    func isSavedCatalog(_ id: String) -> Bool {
+        savedCatalogIDs.contains(id)
+    }
+
+    func importDraft(_ draft: ImportedRecipeDraft) -> Recipe {
+        let recipe = Recipe(
+            title: draft.title,
+            emoji: draft.emoji,
+            cuisine: draft.cuisine,
+            ingredients: draft.ingredients,
+            instructions: draft.instructions,
+            sourceTag: draft.sourceNote
+        )
+        addRecipe(recipe)
+        return recipe
+    }
+
     func setRating(_ value: Int, for recipeID: UUID) {
-        let clamped = max(0, min(5, value))
-        if clamped == 0 {
+        if value <= 0 {
             ratings.removeValue(forKey: recipeID.uuidString)
         } else {
-            ratings[recipeID.uuidString] = clamped
+            ratings[recipeID.uuidString] = min(5, value)
         }
         persistAll()
     }
@@ -123,18 +193,18 @@ final class CookbookStore: ObservableObject {
     }
 
     func toggleStep(recipeID: UUID, index: Int) {
-        var current = Set(checkedSteps[recipeID.uuidString] ?? [])
-        if current.contains(index) {
-            current.remove(index)
+        var steps = checkedSteps[recipeID.uuidString] ?? []
+        if let existing = steps.firstIndex(of: index) {
+            steps.remove(at: existing)
         } else {
-            current.insert(index)
+            steps.append(index)
         }
-        checkedSteps[recipeID.uuidString] = Array(current).sorted()
+        checkedSteps[recipeID.uuidString] = steps
         persistAll()
     }
 
     func isStepChecked(recipeID: UUID, index: Int) -> Bool {
-        (checkedSteps[recipeID.uuidString] ?? []).contains(index)
+        checkedSteps[recipeID.uuidString]?.contains(index) == true
     }
 
     func resetSteps(recipeID: UUID) {
@@ -144,14 +214,9 @@ final class CookbookStore: ObservableObject {
 
     func addIngredientsToShopping(_ lines: [String], recipeID: UUID?) {
         for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-            if shoppingItems.contains(where: { $0.text.caseInsensitiveCompare(trimmed) == .orderedSame && !$0.isChecked }) {
-                continue
-            }
-            shoppingItems.append(
-                ShoppingItem(id: UUID(), text: trimmed, isChecked: false, recipeID: recipeID)
-            )
+            let text = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+            shoppingItems.append(ShoppingItem(id: UUID(), text: text, isChecked: false, recipeID: recipeID))
         }
         persistAll()
     }
@@ -159,7 +224,7 @@ final class CookbookStore: ObservableObject {
     func addShoppingItem(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        shoppingItems.append(ShoppingItem(id: UUID(), text: trimmed, isChecked: false, recipeID: nil))
+        shoppingItems.insert(ShoppingItem(id: UUID(), text: trimmed, isChecked: false, recipeID: nil), at: 0)
         persistAll()
     }
 
@@ -174,40 +239,10 @@ final class CookbookStore: ObservableObject {
         persistAll()
     }
 
-    func addLeftover(leftover: String, idea: String, recipeID: UUID?) {
-        let leftoverText = leftover.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !leftoverText.isEmpty else { return }
-        leftovers.insert(
-            LeftoverNote(
-                id: UUID(),
-                leftover: leftoverText,
-                idea: idea.trimmingCharacters(in: .whitespacesAndNewlines),
-                recipeID: recipeID,
-                createdAt: Date()
-            ),
-            at: 0
-        )
-        persistAll()
-    }
-
-    func deleteLeftover(id: UUID) {
-        leftovers.removeAll { $0.id == id }
-        persistAll()
-    }
-
-    func setMeal(weekday: Int, recipeID: UUID?) {
-        if let index = mealPlan.firstIndex(where: { $0.weekday == weekday }) {
-            mealPlan[index].recipeID = recipeID
-        } else {
-            mealPlan.append(MealPlanEntry(weekday: weekday, recipeID: recipeID))
-        }
-        persistAll()
-    }
-
     func startTimer(id: Int, seconds: Int) {
         guard let index = timers.firstIndex(where: { $0.id == id }) else { return }
-        timers[index].durationSeconds = max(30, seconds)
-        timers[index].endsAt = Date().addingTimeInterval(TimeInterval(timers[index].durationSeconds)).timeIntervalSince1970
+        timers[index].durationSeconds = seconds
+        timers[index].endsAt = Date().addingTimeInterval(TimeInterval(seconds)).timeIntervalSince1970
         timers[index].alarmConsumed = false
         persistTimers()
     }
@@ -234,11 +269,7 @@ final class CookbookStore: ObservableObject {
     }
 
     func recordCook(recipeID: UUID) {
-        guard recipes.contains(where: { $0.id == recipeID }) else { return }
-        cookSessions.insert(
-            CookSession(id: UUID(), recipeID: recipeID, cookedAt: Date()),
-            at: 0
-        )
+        cookSessions.insert(CookSession(id: UUID(), recipeID: recipeID, cookedAt: Date()), at: 0)
         persistAll()
     }
 
@@ -246,66 +277,13 @@ final class CookbookStore: ObservableObject {
         cookSessions.filter { $0.recipeID == recipeID }.count
     }
 
-    func addCaption(_ caption: CaptionEntry) {
-        captions.removeAll { $0.id == caption.id }
-        captions.insert(caption, at: 0)
-        sortCaptions()
-        markActivity(captionTouched: true)
-        persistAll()
-    }
-
-    func updateCaption(_ caption: CaptionEntry) {
-        if let index = captions.firstIndex(where: { $0.id == caption.id }) {
-            let previous = captions[index]
-            captions[index] = caption
-            releasePhotoIfUnused(previous.photoFileName, keeping: caption.photoFileName)
-        } else {
-            captions.insert(caption, at: 0)
-        }
-        sortCaptions()
-        markActivity(captionTouched: true)
-        persistAll()
-    }
-
-    func importSample(_ dish: SampleDish) -> Recipe {
-        let recipe = Recipe(
-            id: UUID(),
-            title: dish.title,
-            emoji: dish.emoji,
-            cuisine: dish.cuisine,
-            ingredients: dish.ingredients,
-            instructions: dish.instructions,
-            photoFileName: nil,
-            createdAt: Date()
-        )
-        addRecipe(recipe)
-        markActivity(viewedRecipeID: recipe.id)
-        return recipe
-    }
-
-    func toggleFavourite(sampleID: String) {
-        if let index = favouriteSampleIDs.firstIndex(of: sampleID) {
-            favouriteSampleIDs.remove(at: index)
-        } else {
-            favouriteSampleIDs.append(sampleID)
-        }
-        persistAll()
-    }
-
-    func isFavourite(_ sampleID: String) -> Bool {
-        favouriteSampleIDs.contains(sampleID)
-    }
-
     func recipe(id: UUID) -> Recipe? {
         recipes.first { $0.id == id }
     }
 
-    func markActivity(viewedRecipeID: UUID? = nil, captionTouched: Bool = false, category: String? = nil) {
+    func markActivity(viewedRecipeID: UUID? = nil, category: String? = nil) {
         if let viewedRecipeID {
             lastViewedRecipeID = viewedRecipeID.uuidString
-        }
-        if captionTouched {
-            lastEditedCaptionDate = Date()
         }
         if let category {
             lastVisitedCategory = category
@@ -316,18 +294,16 @@ final class CookbookStore: ObservableObject {
     func resetAllData() {
         let photoNames = referencedPhotoNames()
         recipes = []
-        captions = []
-        favouriteSampleIDs = []
+        fridgeItems = []
+        savedCatalogIDs = []
         themeLabels = []
-        lastEditedCaptionDate = nil
         lastVisitedCategory = ""
         lastViewedRecipeID = nil
         cookSessions = []
         ratings = [:]
         checkedSteps = [:]
         shoppingItems = []
-        leftovers = []
-        mealPlan = WeekPlan.mondayFirst.map { MealPlanEntry(weekday: $0.weekday, recipeID: nil) }
+        mealPlan = WeekPlan.mondayFirst.map { MealPlanEntry(weekday: $0.weekday) }
         timers = KitchenTimerSlot.defaults
         for key in Key.all {
             defaults.removeObject(forKey: key)
@@ -335,13 +311,12 @@ final class CookbookStore: ObservableObject {
         for name in photoNames {
             PhotoDisk.delete(name)
         }
-        NotificationCenter.default.post(name: Notification.Name("dataReset"), object: nil)
     }
 
     private func loadAll() {
         recipes = decode([Recipe].self, key: Key.recipes) ?? []
-        captions = decode([CaptionEntry].self, key: Key.captions) ?? []
-        favouriteSampleIDs = decode([String].self, key: Key.favourites) ?? []
+        fridgeItems = decode([FridgeItem].self, key: Key.fridge) ?? []
+        savedCatalogIDs = decode([String].self, key: Key.savedCatalog) ?? []
         themeLabels = decode([String].self, key: Key.themeLabels) ?? []
         lastVisitedCategory = defaults.string(forKey: Key.lastVisitedCategory) ?? ""
         lastViewedRecipeID = defaults.string(forKey: Key.lastViewedRecipeID)
@@ -349,39 +324,43 @@ final class CookbookStore: ObservableObject {
         ratings = decode([String: Int].self, key: Key.ratings) ?? [:]
         checkedSteps = decode([String: [Int]].self, key: Key.checkedSteps) ?? [:]
         shoppingItems = decode([ShoppingItem].self, key: Key.shoppingItems) ?? []
-        leftovers = decode([LeftoverNote].self, key: Key.leftovers) ?? []
         if let savedPlan = decode([MealPlanEntry].self, key: Key.mealPlan), !savedPlan.isEmpty {
             mealPlan = WeekPlan.mondayFirst.map { day in
                 savedPlan.first(where: { $0.weekday == day.weekday })
-                    ?? MealPlanEntry(weekday: day.weekday, recipeID: nil)
+                    ?? MealPlanEntry(weekday: day.weekday)
             }
         }
         if let savedTimers = decode([KitchenTimerSlot].self, key: Key.timers), savedTimers.count == 3 {
             timers = savedTimers
         }
-        if let interval = defaults.object(forKey: Key.lastEditedCaptionDate) as? TimeInterval {
-            lastEditedCaptionDate = Date(timeIntervalSince1970: interval)
-        } else {
-            lastEditedCaptionDate = nil
-        }
         sortRecipes()
-        sortCaptions()
         cookSessions.sort { $0.cookedAt > $1.cookedAt }
         refreshThemeLabels()
     }
 
     private func persistAll() {
         encode(recipes, key: Key.recipes)
-        encode(captions, key: Key.captions)
-        encode(favouriteSampleIDs, key: Key.favourites)
         encode(cookSessions, key: Key.cookSessions)
         encode(ratings, key: Key.ratings)
         encode(checkedSteps, key: Key.checkedSteps)
         encode(shoppingItems, key: Key.shoppingItems)
-        encode(leftovers, key: Key.leftovers)
-        encode(mealPlan, key: Key.mealPlan)
+        persistFridge()
+        persistCatalog()
+        persistMealPlan()
         persistTimers()
         persistMeta()
+    }
+
+    private func persistFridge() {
+        encode(fridgeItems, key: Key.fridge)
+    }
+
+    private func persistCatalog() {
+        encode(savedCatalogIDs, key: Key.savedCatalog)
+    }
+
+    private func persistMealPlan() {
+        encode(mealPlan, key: Key.mealPlan)
     }
 
     private func persistMeta() {
@@ -392,11 +371,6 @@ final class CookbookStore: ObservableObject {
         } else {
             defaults.removeObject(forKey: Key.lastViewedRecipeID)
         }
-        if let lastEditedCaptionDate {
-            defaults.set(lastEditedCaptionDate.timeIntervalSince1970, forKey: Key.lastEditedCaptionDate)
-        } else {
-            defaults.removeObject(forKey: Key.lastEditedCaptionDate)
-        }
     }
 
     private func persistTimers() {
@@ -404,14 +378,13 @@ final class CookbookStore: ObservableObject {
     }
 
     private func refreshThemeLabels() {
-        let labels = Array(
+        themeLabels = Array(
             Set(
                 recipes
                     .map { $0.cuisine.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty }
             )
         ).sorted()
-        themeLabels = labels
         encode(themeLabels, key: Key.themeLabels)
     }
 
@@ -419,28 +392,12 @@ final class CookbookStore: ObservableObject {
         recipes.sort { $0.createdAt > $1.createdAt }
     }
 
-    private func sortCaptions() {
-        captions.sort { $0.updatedAt > $1.updatedAt }
-    }
-
     private func referencedPhotoNames() -> Set<String> {
-        var names = Set<String>()
-        for recipe in recipes {
-            if let name = recipe.photoFileName, !name.isEmpty {
-                names.insert(name)
-            }
-        }
-        for caption in captions {
-            if let name = caption.photoFileName, !name.isEmpty {
-                names.insert(name)
-            }
-        }
-        return names
+        Set(recipes.compactMap { $0.photoFileName }.filter { !$0.isEmpty })
     }
 
     private func isPhotoReferenced(_ fileName: String) -> Bool {
         recipes.contains { $0.photoFileName == fileName }
-            || captions.contains { $0.photoFileName == fileName }
     }
 
     private func releasePhotoIfUnused(_ oldName: String?, keeping newName: String?) {

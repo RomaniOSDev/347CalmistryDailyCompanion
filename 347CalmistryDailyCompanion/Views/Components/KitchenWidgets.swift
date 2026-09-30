@@ -11,8 +11,8 @@ struct LeafRatingRow: View {
                     onSelect(index == value ? 0 : index)
                 } label: {
                     Image(systemName: index <= value ? "leaf.fill" : "leaf")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(Palette.primary)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(index <= value ? Palette.primary : Palette.muted.opacity(0.55))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Rate \(index)")
@@ -32,14 +32,14 @@ struct ServingFactorPicker: View {
                 } label: {
                     Text(ServingScale.label(for: value))
                         .font(.system(.subheadline, design: .rounded).weight(.bold))
-                        .foregroundColor(factor == value ? Palette.surface : Palette.primary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(factor == value ? Palette.primary : Palette.surface)
+                        .foregroundColor(factor == value ? Palette.onPrimary : Palette.ink)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(factor == value ? Palette.primary : Palette.cardSoft)
                         .clipShape(Capsule())
                         .overlay {
                             Capsule()
-                                .stroke(Palette.primary.opacity(0.28), lineWidth: 1)
+                                .stroke(factor == value ? Color.clear : Palette.hairline, lineWidth: 1)
                         }
                 }
                 .buttonStyle(.plain)
@@ -60,12 +60,12 @@ struct StepCheckRow: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: large ? 28 : 18, weight: .semibold))
-                    .foregroundColor(Palette.primary)
+                    .foregroundColor(isChecked ? Palette.surface : Palette.primary)
                     .padding(.top, 2)
                 Text("\(index + 1). \(text)")
-                    .font(.system(large ? .title3 : .body, design: .rounded).weight(large ? .bold : .regular))
-                    .foregroundColor(isChecked ? Palette.accent.opacity(0.7) : (large ? Palette.primary : Palette.accent))
-                    .strikethrough(isChecked, color: Palette.accent.opacity(0.55))
+                    .font(.system(large ? .title3 : .body, design: .rounded).weight(large ? .bold : .medium))
+                    .foregroundColor(isChecked ? Palette.muted.opacity(0.7) : (large ? Palette.ink : Palette.ink.opacity(0.9)))
+                    .strikethrough(isChecked, color: Palette.muted.opacity(0.5))
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)

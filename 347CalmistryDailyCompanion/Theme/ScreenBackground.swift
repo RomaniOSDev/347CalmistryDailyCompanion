@@ -1,67 +1,52 @@
 import SwiftUI
 import UIKit
 
-struct HerbMeadow: View {
+struct PantryCanvas: View {
     var body: some View {
-        Canvas { context, size in
-            context.fill(
-                Path(CGRect(origin: .zero, size: size)),
-                with: .color(Color("AppBackground"))
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color("AppBackground"),
+                    Color("AppSurface").opacity(0.92),
+                    Color("AppBackground")
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
             )
 
-            let wash = Gradient(colors: [
-                Color("AppSurface").opacity(0.42),
-                Color("AppBackground").opacity(0.05)
-            ])
-            context.fill(
-                Path(ellipseIn: CGRect(
-                    x: -size.width * 0.18,
-                    y: -size.height * 0.08,
-                    width: size.width * 0.95,
-                    height: size.height * 0.48
-                )),
-                with: .linearGradient(
-                    wash,
-                    startPoint: CGPoint(x: 0, y: 0),
-                    endPoint: CGPoint(x: size.width, y: size.height * 0.4)
-                )
-            )
+            // Soft light pools
+            Circle()
+                .fill(Color.white.opacity(0.14))
+                .frame(width: 280, height: 280)
+                .blur(radius: 40)
+                .offset(x: -90, y: -220)
 
-            var rng = SeededRandom(seed: 347_001)
-            for _ in 0..<96 {
-                let x = rng.next() * size.width
-                let y = rng.next() * size.height
-                let leafWidth = 9 + rng.next() * 18
-                let leafHeight = leafWidth * (1.7 + rng.next() * 0.8)
-                let rotation = Angle.degrees(rng.next() * 360)
-                let tint = rng.next()
-                let color: Color = tint < 0.18
-                    ? Color("AppPrimary").opacity(0.22 + rng.next() * 0.18)
-                    : Color("AppSurface").opacity(0.28 + rng.next() * 0.42)
+            Circle()
+                .fill(Color("AppPrimary").opacity(0.18))
+                .frame(width: 220, height: 220)
+                .blur(radius: 50)
+                .offset(x: 140, y: 80)
 
-                var leaf = Path()
-                leaf.addEllipse(in: CGRect(
-                    x: -leafWidth / 2,
-                    y: -leafHeight / 2,
-                    width: leafWidth,
-                    height: leafHeight
-                ))
+            Circle()
+                .fill(Color("AppAccent").opacity(0.14))
+                .frame(width: 260, height: 260)
+                .blur(radius: 55)
+                .offset(x: -40, y: 320)
 
-                var transformed = context
-                transformed.translateBy(x: x, y: y)
-                transformed.rotate(by: rotation)
-                transformed.fill(leaf, with: .color(color))
-            }
-
-            var berryRng = SeededRandom(seed: 347_880)
-            for _ in 0..<18 {
-                let x = berryRng.next() * size.width
-                let y = berryRng.next() * size.height
-                let radius = 2.2 + berryRng.next() * 3.4
-                context.fill(
-                    Path(ellipseIn: CGRect(x: x, y: y, width: radius, height: radius)),
-                    with: .color(Color("AppAccent").opacity(0.35 + berryRng.next() * 0.25))
-                )
+            // Decorative leaf dots
+            Canvas { context, size in
+                var rng = SeededRandom(seed: 904_221)
+                for _ in 0..<40 {
+                    let x = rng.next() * size.width
+                    let y = rng.next() * size.height
+                    let w = 10 + rng.next() * 22
+                    let h = w * (1.5 + rng.next() * 0.7)
+                    var leaf = Path(ellipseIn: CGRect(x: -w / 2, y: -h / 2, width: w, height: h))
+                    var t = context
+                    t.translateBy(x: x, y: y)
+                    t.rotate(by: .degrees(rng.next() * 360))
+                    t.fill(leaf, with: .color(Color.white.opacity(0.06 + rng.next() * 0.08)))
+                }
             }
         }
         .ignoresSafeArea()
@@ -74,7 +59,7 @@ struct ScreenBackground: ViewModifier {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background {
-                HerbMeadow()
+                PantryCanvas()
             }
     }
 }
@@ -127,6 +112,11 @@ extension View {
             .background(Color.clear)
             .background(NavigationBackdropClearer())
             .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+
+    func tabRootPadding() -> some View {
+        padding(.bottom, 104)
     }
 }
 

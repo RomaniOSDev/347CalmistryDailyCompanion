@@ -2,33 +2,44 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var store = CookbookStore()
-    @State private var destination: DeskDestination = .book
+    @State private var tab: AppTab = .fridge
 
     var body: some View {
-        HStack(spacing: 0) {
-            HerbRail(selection: $destination)
+        ZStack {
+            PantryCanvas()
 
             Group {
-                switch destination {
-                case .book:
+                switch tab {
+                case .fridge:
+                    FridgePlanView()
+                case .shelf:
+                    AuthorShelfView()
+                case .kitchen:
                     RecipeBookView()
-                case .notes:
-                    CaptionAlbumView()
-                case .tastes:
-                    TasteExplorerView()
-                case .stats:
-                    KitchenStatsView()
-                case .desk:
-                    KitchenDeskView()
+                case .capture:
+                    CaptureImportView()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .environmentObject(store)
+
+            VStack {
+                Spacer()
+                MainTabBar(selection: $tab)
+            }
         }
         .ignoresSafeArea(.keyboard)
         .studioBackdrop()
         .dismissKeyboardOnTap()
-        .environmentObject(store)
         .tint(Palette.primary)
+        .fullScreenCover(isPresented: Binding(
+            get: { !store.hasCompletedOnboarding },
+            set: { if !$0 { store.completeOnboarding() } }
+        )) {
+            OnboardingFlow {
+                store.completeOnboarding()
+            }
+        }
     }
 }
 

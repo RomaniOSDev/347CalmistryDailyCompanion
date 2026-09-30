@@ -20,16 +20,16 @@ struct CookModeView: View {
                     cookBody(recipe)
                 } else {
                     EmptyGarden(
-                        title: "Recipe gone",
+                        title: "Recipe missing",
                         systemImage: "book.closed",
-                        message: "This dish is no longer in your book."
+                        message: "This dish is no longer in your kitchen."
                     )
                     .padding(16)
                 }
             }
             .gardenPage()
             .background {
-                HerbMeadow()
+                PantryCanvas()
             }
             .navigationTitle("Cook Mode")
             .navigationBarTitleDisplayMode(.inline)
@@ -40,7 +40,7 @@ struct CookModeView: View {
             }
         }
         .background {
-            HerbMeadow()
+            PantryCanvas()
         }
         .onAppear {
             UIApplication.shared.isIdleTimerDisabled = true
@@ -57,16 +57,18 @@ struct CookModeView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    HStack(spacing: 10) {
-                        Text(recipe.emoji)
-                            .font(.system(size: 36))
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(recipe.title)
-                                .font(.system(.title2, design: .rounded).weight(.bold))
-                                .foregroundColor(Palette.primary)
-                            Text("Step \(min(stepIndex + 1, recipe.instructions.count)) of \(max(recipe.instructions.count, 1))")
-                                .font(.system(.subheadline, design: .rounded))
-                                .foregroundColor(Palette.accent)
+                    PaperCard(emphasized: true) {
+                        HStack(spacing: 10) {
+                            Text(recipe.emoji)
+                                .font(.system(size: 36))
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(recipe.title)
+                                    .font(.system(.title2, design: .rounded).weight(.bold))
+                                    .foregroundColor(Palette.ink)
+                                Text("Step \(min(stepIndex + 1, recipe.instructions.count)) of \(max(recipe.instructions.count, 1))")
+                                    .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                                    .foregroundColor(Palette.muted)
+                            }
                         }
                     }
 
@@ -76,11 +78,11 @@ struct CookModeView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Ingredients")
                                 .font(.system(.headline, design: .rounded).weight(.bold))
-                                .foregroundColor(Palette.primary)
+                                .foregroundColor(Palette.ink)
                             ForEach(Array(recipe.ingredients.enumerated()), id: \.offset) { _, item in
                                 Text("• \(ServingScale.apply(item, factor: factor))")
                                     .font(.system(.body, design: .rounded))
-                                    .foregroundColor(Palette.accent)
+                                    .foregroundColor(Palette.muted)
                             }
                         }
                     }
@@ -137,15 +139,18 @@ struct CookModeView: View {
             Text(title)
                 .font(.system(.body, design: .rounded).weight(.bold))
         }
-        .foregroundColor(Palette.primary)
+        .foregroundColor(Palette.onPrimary)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
-        .background(Palette.surface)
+        .background(
+            LinearGradient(
+                colors: [Palette.primary, Palette.accent],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        )
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Palette.primary.opacity(0.28), lineWidth: 1)
-        }
+        .shadow(color: Palette.primary.opacity(0.35), radius: 8, y: 4)
     }
 
     private func nextOpenStep(in recipe: Recipe) -> Int? {

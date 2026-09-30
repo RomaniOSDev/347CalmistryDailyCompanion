@@ -29,19 +29,19 @@ struct RecipeEditorSheet: View {
                     fieldBlock(title: "Title") {
                         TextField("Dish name", text: $titleText)
                             .font(.system(.body, design: .rounded))
-                            .foregroundColor(Palette.primary)
+                            .foregroundColor(Palette.ink)
                     }
 
                     HStack(spacing: 10) {
                         fieldBlock(title: "Emoji") {
                             TextField("🌿", text: $emojiText)
                                 .font(.system(.body, design: .rounded))
-                                .foregroundColor(Palette.primary)
+                                .foregroundColor(Palette.ink)
                         }
                         fieldBlock(title: "Cuisine") {
                             TextField("Italian, market…", text: $cuisineText)
                                 .font(.system(.body, design: .rounded))
-                                .foregroundColor(Palette.primary)
+                                .foregroundColor(Palette.ink)
                         }
                     }
 
@@ -69,10 +69,10 @@ struct RecipeEditorSheet: View {
             .dismissKeyboardOnTap()
             .keyboardDoneButton()
             .background {
-                HerbMeadow()
+                PantryCanvas()
             }
             .gardenPage()
-            .navigationTitle(recipe == nil ? "New Recipe" : "Edit Recipe")
+            .navigationTitle(recipe == nil ? "New dish" : "Edit dish")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -89,55 +89,57 @@ struct RecipeEditorSheet: View {
             }
         }
         .background {
-            HerbMeadow()
+            PantryCanvas()
         }
         .tint(Palette.primary)
     }
 
     private var photoBlock: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Photo")
-                .font(.system(.subheadline, design: .rounded).weight(.bold))
-                .foregroundColor(Palette.primary)
+        PaperCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Photo")
+                    .font(.system(.subheadline, design: .rounded).weight(.bold))
+                    .foregroundColor(Palette.ink)
 
-            if let previewImage {
-                Color.clear
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 132)
-                    .background {
-                        Palette.surface
-                            .overlay {
-                                Image(uiImage: previewImage)
-                                    .resizable()
-                                    .scaledToFill()
-                            }
-                            .clipped()
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            }
-
-            HStack(spacing: 10) {
-                PhotosPicker(selection: $pickerItem, matching: .images) {
-                    Label("Choose Photo", systemImage: "photo.on.rectangle")
-                        .font(.system(.subheadline, design: .rounded).weight(.bold))
-                        .foregroundColor(Palette.primary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(Palette.surface)
-                        .clipShape(Capsule())
+                if let previewImage {
+                    Color.clear
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 132)
+                        .background {
+                            Palette.cardSoft
+                                .overlay {
+                                    Image(uiImage: previewImage)
+                                        .resizable()
+                                        .scaledToFill()
+                                }
+                                .clipped()
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
 
-                if previewImage != nil {
-                    Button("Remove") {
-                        pendingJPEG = nil
-                        previewImage = nil
-                        pickerItem = nil
-                        if existingPhotoName != nil {
-                            removeExistingPhoto = true
-                        }
+                HStack(spacing: 10) {
+                    PhotosPicker(selection: $pickerItem, matching: .images) {
+                        Label("Choose Photo", systemImage: "photo.on.rectangle")
+                            .font(.system(.subheadline, design: .rounded).weight(.bold))
+                            .foregroundColor(Palette.onPrimary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Palette.primary)
+                            .clipShape(Capsule())
                     }
-                    .font(.system(.subheadline, design: .rounded))
-                    .foregroundColor(Palette.accent)
+
+                    if previewImage != nil {
+                        Button("Remove") {
+                            pendingJPEG = nil
+                            previewImage = nil
+                            pickerItem = nil
+                            if existingPhotoName != nil {
+                                removeExistingPhoto = true
+                            }
+                        }
+                        .font(.system(.subheadline, design: .rounded).weight(.bold))
+                        .foregroundColor(Palette.muted)
+                    }
                 }
             }
         }
@@ -147,43 +149,50 @@ struct RecipeEditorSheet: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.system(.subheadline, design: .rounded).weight(.bold))
-                .foregroundColor(Palette.primary)
+                .foregroundColor(Palette.onPrimary)
+                .shadow(color: .black.opacity(0.2), radius: 1, y: 1)
             content()
                 .padding(10)
-                .background(Palette.surface)
+                .background(Palette.card)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Palette.hairline, lineWidth: 1)
+                }
         }
     }
 
     private func lineEditor(title: String, lines: Binding<[EditableLine]>, placeholder: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(title)
-                    .font(.system(.subheadline, design: .rounded).weight(.bold))
-                    .foregroundColor(Palette.primary)
-                Spacer()
-                Button {
-                    lines.wrappedValue.append(EditableLine(text: ""))
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .foregroundColor(Palette.primary)
+        PaperCard {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(title)
+                        .font(.system(.subheadline, design: .rounded).weight(.bold))
+                        .foregroundColor(Palette.ink)
+                    Spacer()
+                    Button {
+                        lines.wrappedValue.append(EditableLine(text: ""))
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundColor(Palette.primary)
+                    }
                 }
-            }
 
-            ForEach(lines) { $line in
-                HStack(spacing: 8) {
-                    TextField(placeholder, text: $line.text)
-                        .font(.system(.body, design: .rounded))
-                        .foregroundColor(Palette.primary)
-                        .padding(10)
-                        .background(Palette.surface)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    if lines.wrappedValue.count > 1 {
-                        Button {
-                            lines.wrappedValue.removeAll { $0.id == line.id }
-                        } label: {
-                            Image(systemName: "minus.circle")
-                                .foregroundColor(Palette.accent)
+                ForEach(lines) { $line in
+                    HStack(spacing: 8) {
+                        TextField(placeholder, text: $line.text)
+                            .font(.system(.body, design: .rounded))
+                            .foregroundColor(Palette.ink)
+                            .padding(10)
+                            .background(Palette.cardSoft)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        if lines.wrappedValue.count > 1 {
+                            Button {
+                                lines.wrappedValue.removeAll { $0.id == line.id }
+                            } label: {
+                                Image(systemName: "minus.circle")
+                                    .foregroundColor(Palette.muted)
+                            }
                         }
                     }
                 }

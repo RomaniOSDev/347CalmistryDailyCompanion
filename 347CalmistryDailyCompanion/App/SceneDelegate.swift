@@ -13,10 +13,19 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         nav.configureWithTransparentBackground()
         nav.backgroundColor = .clear
         nav.shadowColor = .clear
+        nav.titleTextAttributes = [
+            .foregroundColor: UIColor.white,
+            .font: UIFont.systemFont(ofSize: 17, weight: .bold)
+        ]
+        nav.largeTitleTextAttributes = [
+            .foregroundColor: UIColor.white
+        ]
         UINavigationBar.appearance().standardAppearance = nav
         UINavigationBar.appearance().scrollEdgeAppearance = nav
         UINavigationBar.appearance().compactAppearance = nav
         UINavigationBar.appearance().isTranslucent = true
+        UINavigationBar.appearance().tintColor = .white
+        UIToolbar.appearance().tintColor = UIColor(named: "AppPrimary")
 
         let root = UIHostingController(rootView: ContentView())
         root.view.backgroundColor = meadow
